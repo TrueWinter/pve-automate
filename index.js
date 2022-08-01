@@ -64,7 +64,7 @@ function getLXCInfo() {
 				Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
 			}
 		}).then((response) => {
-			note += formatVMData(response.data.data);
+			note += formatVMData(response.data.data, 'Containers');
 			resolve();
 		}).catch((err) => {
 			reject(new Error(`${err.response.status}: ${err.response.statusText}`));
@@ -79,7 +79,7 @@ function getVMInfo() {
 				Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
 			}
 		}).then((response) => {
-			note += formatVMData(response.data.data);
+			note += formatVMData(response.data.data, 'VMs');
 			resolve();
 		}).catch((err) => {
 			reject(new Error(`${err.response.status}: ${err.response.statusText}`));
@@ -87,10 +87,10 @@ function getVMInfo() {
 	});
 }
 
-function formatVMData(data) {
+function formatVMData(data, type) {
 	var output = '';
 
-	output += 'Containers\n\n';
+	output += `${type}\n\n`;
 	output += '\\==========\n\n';
 	output += 'ID (Name) CPU RAM Disk [Status]\n\n';
 	output += '\\----------\n\n';

@@ -1,0 +1,6 @@
+{
+	"tokenId": "root@pam!token-name",
+	"tokenSecret": "84eef556-11ef-11ed-b0b2-00d8610e3de7",
+	"pveUrl": "https://pve.example.com:8006/",
+	"nodeId": "pve-01"
+}

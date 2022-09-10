@@ -95,12 +95,13 @@ function formatVMData(data, type) {
 	output += 'ID (Name) CPU RAM Disk [Status]\n\n';
 	output += '\\----------\n\n';
 
+	var vms = [];
 	for (var i = 0; i < data.length; i++) {
 		let thisVM = data[i];
 
 		if (thisVM.template === 1) continue;
 
-		output += `${thisVM.vmid} (${thisVM.name}) ${thisVM.cpus} ${bytesToMB(thisVM.maxmem)}MB ${Math.round(bytesToGB(thisVM.maxdisk) * 100) / 100}GB [${thisVM.status}]\n\n`;
+		vms.push(`${thisVM.vmid} (${thisVM.name}) ${thisVM.cpus} ${bytesToMB(thisVM.maxmem)}MB ${Math.round(bytesToGB(thisVM.maxdisk) * 100) / 100}GB [${thisVM.status}]\n\n`);
 		totalRAM += bytesToMB(thisVM.maxmem);
 		totalDisk += bytesToGB(thisVM.maxdisk);
 
@@ -109,6 +110,8 @@ function formatVMData(data, type) {
 		}
 	}
 
+	vms.sort();
+	output += vms.join('');
 	output += '\n\n---\n\n';
 
 	return output;

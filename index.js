@@ -7,6 +7,7 @@ var note = '';
 var totalRAM = 0;
 var totalDisk = 0;
 var runningRAM = 0;
+var systemRAM = 0;
 
 var pveVersion = 0;
 var shouldEscape = false;
@@ -64,98 +65,124 @@ axios.get(createURL(`nodes/${config.nodeId}/version`), {
 		totalRAM = 0;
 		totalDisk = 0;
 		runningRAM = 0;
+		systemRAM = 0;
 
-		getLXCInfo().then(() => {
-			getVMInfo().then(() => {
-				note += formatForVersion(`Running RAM: ${runningRAM}MB (${Math.round(runningRAM / 1024 * 100) / 100}GB)`, false, true);
-				note += formatForVersion(`Total RAM: ${totalRAM}MB (${Math.round(totalRAM / 1024 * 100) / 100}GB)`, false, true);
-				note += `Total Disk: ${Math.round(totalDisk * 100) / 100}GB`;
+		axios.get(createURL(`cluster/resources`), {
+			headers: {
+				Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
+			}
+		}).then((response) => {
+			var clusterInfo = response.data.data;
 
-				axios.put(createURL(`nodes/${config.nodeId}/config`), {
-					description: note
-				}, {
-					headers: {
-						Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
-					}
+			for (var i = 0; i < clusterInfo.length; i++) {
+				let thisInfo = clusterInfo[i];
+
+				if (!thisInfo.node || !thisInfo.type || !thisInfo.maxmem) {
+					continue;
+				}
+
+				if (thisInfo.node === config.nodeId && thisInfo.type === 'node') {
+					systemRAM = Math.round(bytesToMB(thisInfo.maxmem));
+					break;
+				}
+			}
+
+			getLXCInfo().then(() => {
+				getVMInfo().then(() => {
+					note += formatForVersion(`Running RAM: ${runningRAM}MB (${Math.round(runningRAM / 1024 * 100) / 100}GB)`, false, true);
+					note += formatForVersion(`Total RAM: ${totalRAM}MB (${Math.round(totalRAM / 1024 * 100) / 100}GB)`, false, true);
+					note += formatForVersion(`System RAM: ${systemRAM}MB (${Math.round(systemRAM / 1024 * 100) / 100}GB)`, false, true);
+					note += `Total Disk: ${Math.round(totalDisk * 100) / 100}GB`;
+
+					axios.put(createURL(`nodes/${config.nodeId}/config`), {
+						description: note
+					}, {
+						headers: {
+							Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
+						}
+					}).catch((err) => {
+						console.log(err);
+						console.error('Failed to update note:');
+						console.error(err.response.statusText);
+					});
 				}).catch((err) => {
-					console.log(err);
-					console.error('Failed to update note:');
-					console.error(err.response.statusText);
+					console.error('Failed to get data from Proxmox:');
+					console.error(err);
 				});
 			}).catch((err) => {
 				console.error('Failed to get data from Proxmox:');
 				console.error(err);
 			});
 		}).catch((err) => {
-			console.error('Failed to get data from Proxmox:');
+			console.error('Failed to fetch cluster information');
 			console.error(err);
 		});
-	});
 
-	function getLXCInfo() {
-		return new Promise((resolve, reject) => {
-			axios.get(createURL(`nodes/${config.nodeId}/lxc`), {
-				headers: {
-					Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
-				}
-			}).then((response) => {
-				note += formatVMData(response.data.data, 'Containers');
-				resolve();
-			}).catch((err) => {
-				reject(new Error(`${err.response.status}: ${err.response.statusText}`));
+		function getLXCInfo() {
+			return new Promise((resolve, reject) => {
+				axios.get(createURL(`nodes/${config.nodeId}/lxc`), {
+					headers: {
+						Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
+					}
+				}).then((response) => {
+					note += formatVMData(response.data.data, 'Containers');
+					resolve();
+				}).catch((err) => {
+					reject(new Error(`${err.response.status}: ${err.response.statusText}`));
+				});
 			});
-		});
-	}
+		}
 
-	function getVMInfo() {
-		return new Promise((resolve, reject) => {
-			axios.get(createURL(`nodes/${config.nodeId}/qemu`), {
-				headers: {
-					Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
-				}
-			}).then((response) => {
-				note += formatVMData(response.data.data, 'VMs');
-				resolve();
-			}).catch((err) => {
-				reject(new Error(`${err.response.status}: ${err.response.statusText}`));
+		function getVMInfo() {
+			return new Promise((resolve, reject) => {
+				axios.get(createURL(`nodes/${config.nodeId}/qemu`), {
+					headers: {
+						Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`
+					}
+				}).then((response) => {
+					note += formatVMData(response.data.data, 'VMs');
+					resolve();
+				}).catch((err) => {
+					reject(new Error(`${err.response.status}: ${err.response.statusText}`));
+				});
 			});
-		});
-	}
+		}
 
-	function formatVMData(data, type) {
-		var output = '';
+		function formatVMData(data, type) {
+			var output = '';
 
-		output += formatForVersion(`${type}`, false, true);
-		output += formatForVersion('==========', true, true);
-		output += formatForVersion('ID (Name) CPU RAM Disk [Status]', false, true);
-		output += formatForVersion('----------', true, true);
+			output += formatForVersion(`${type}`, false, true);
+			output += formatForVersion('==========', true, true);
+			output += formatForVersion('ID (Name) CPU RAM Disk [Status]', false, true);
+			output += formatForVersion('----------', true, true);
 
-		var vms = [];
-		for (var i = 0; i < data.length; i++) {
-			let thisVM = data[i];
+			var vms = [];
+			for (var i = 0; i < data.length; i++) {
+				let thisVM = data[i];
 
-			if (thisVM.template === 1) continue;
+				if (thisVM.template === 1) continue;
 
-			vms.push(`${thisVM.vmid} (${thisVM.name}) ${thisVM.cpus} ${bytesToMB(thisVM.maxmem)}MB ${Math.round(bytesToGB(thisVM.maxdisk) * 100) / 100}GB [${thisVM.status}]\n\n`);
-			totalRAM += bytesToMB(thisVM.maxmem);
-			totalDisk += bytesToGB(thisVM.maxdisk);
+				vms.push(`${thisVM.vmid} (${thisVM.name}) ${thisVM.cpus} ${bytesToMB(thisVM.maxmem)}MB ${Math.round(bytesToGB(thisVM.maxdisk) * 100) / 100}GB [${thisVM.status}]\n\n`);
+				totalRAM += bytesToMB(thisVM.maxmem);
+				totalDisk += bytesToGB(thisVM.maxdisk);
 
-			if (thisVM.status === 'running') {
-				runningRAM += bytesToMB(thisVM.maxmem);
+				if (thisVM.status === 'running') {
+					runningRAM += bytesToMB(thisVM.maxmem);
+				}
 			}
+
+			vms.sort();
+			output += vms.join('');
+
+			if (shouldEscape) {
+				output += '\n\n---\n\n';
+			} else {
+				output += '----------\n\n';
+			}
+
+			return output;
 		}
-
-		vms.sort();
-		output += vms.join('');
-
-		if (shouldEscape) {
-			output += '\n\n---\n\n';
-		} else {
-			output += '----------\n\n';
-		}
-
-		return output;
-	}
+	});
 }).catch((err) => {
 	console.error('Failed to get PVE version');
 	console.error(err);
